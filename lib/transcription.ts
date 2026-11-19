@@ -1,3 +1,5 @@
+import { layoutTab } from "./tab-layout";
+
 export const MAX_SECONDS = 15;
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 4_000_000;
@@ -27,10 +29,13 @@ export function validateAudio(input: AudioInput, real = false) {
 
 export type Chord = {
   name: string;
+  voicingId?: string;
   frets: (number | null)[];
   fingers: number[];
   barre?: { fret: number; from: number; to: number };
 };
+
+export type ChordInterval = { start: number; end: number; name: string; voicingId?: string };
 
 export type Note = { pitch: number; start: number; duration: number };
 export type TimedColumn = {
@@ -50,6 +55,7 @@ export type Score = {
     timing?: TimedColumn[];
   }[];
   chords: Chord[];
+  chordIntervals?: ChordInterval[];
   notices?: string[];
 };
 
@@ -78,23 +84,29 @@ export function createMockScore(input?: AudioInput): Score {
   };
 }
 
-export function formatTab(score: Score) {
-  const measureWidth = Math.max(...score.measures.map(({ beats, chord }) => Math.max(beats.length * 3, chord.length)));
-  const header = score.measures.map(({ chord, chordChanges }) => {
-    if (!chordChanges) return chord.padEnd(measureWidth + 1);
-    return Array.from({ length: measureWidth }, (_, i) => {
-      const change = chordChanges.find(({ beat, name }) => i >= beat * 3 && i < beat * 3 + name.length);
-      return change ? change.name[i - change.beat * 3] : " ";
-    }).join("") + " ";
-  }).join("");
-  const strings = score.tuning.map((string, index) =>
-    string + "|" + score.measures.map(({ beats }) => beats.map((beat) =>
-      String(beat[index] ?? "-").padEnd(3, "-")).join("").padEnd(measureWidth, "-")).join("|") + "|",
-  ).reverse();
+export function formatTab(score: Score, includeTiming = true) {
+  const systems = layoutTab(score, 760).map(({ events }) => {
+    const columns = events.map(({ x }) => Math.round((x - 60) / 8));
+    const length = (columns.at(-1) ?? 0) + 4;
+    const header = Array<string>(length).fill(" ");
+    const strings = score.tuning.map(() => Array<string>(length).fill("-"));
+    for (const [{ change, frets }, offset] of events.map((event, index) => [event, columns[index]] as const)) {
+      if (change) header.splice(offset, change.name.length, ...change.name);
+      frets?.forEach((fret, string) => {
+        if (fret === null) return;
+        const digits = String(fret);
+        strings[string].splice(offset, digits.length, ...digits);
+      });
+    }
+    return ["  " + header.join("").trimEnd(), ...strings.map((line, index) =>
+      score.tuning[index] + " " + line.join(""),
+    ).reverse()].join("\n");
+  });
+  if (!includeTiming) return systems.join("\n\n");
   const timing = score.measures.flatMap(({ timing }) => timing ?? []).flatMap(({ restBefore, notes, start }) => [
     ...(restBefore >= 0.1 ? [`${start.toFixed(3)}초 전 쉼 ${restBefore.toFixed(3)}초`] : []),
     ...notes.map(({ pitch, start, duration, string }) =>
       `${start.toFixed(3)}초 · ${duration.toFixed(3)}초 지속 · MIDI ${pitch} · ${string === null ? "줄 배치 불가" : `${6 - string}번 줄`}`),
   ]);
-  return ["  " + header.trimEnd(), ...strings, ...(timing.length ? ["", "음표 시간", ...timing] : [])].join("\n");
+  return [...systems, ...(timing.length ? [["음표 시간", ...timing].join("\n")] : [])].join("\n\n");
 }

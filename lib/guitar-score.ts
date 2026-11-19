@@ -1,8 +1,8 @@
 import { exampleScore, STANDARD_TUNING } from "./transcription";
-import type { Note, Score, TimedColumn } from "./transcription";
+import type { ChordInterval, Note, Score, TimedColumn } from "./transcription";
 
 export type { Note } from "./transcription";
-export type ChordInterval = { start: number; end: number; name: string };
+export type { ChordInterval } from "./transcription";
 
 const openPitches = [40, 45, 50, 55, 59, 64];
 const simultaneousWindow = 0.04;
@@ -107,6 +107,7 @@ export function createGuitarScore(name: string, notes: Note[], intervals: ChordI
     mock: false,
     measures,
     chords,
+    chordIntervals: intervals,
     notices,
   };
 }

@@ -9,7 +9,8 @@ import type { DragEvent } from "react";
 import {
   AUDIO_EXTENSIONS, exampleScore, formatTab, validateAudio, validateAudioFile,
 } from "../lib/transcription";
-import type { AudioInput, Chord, Score } from "../lib/transcription";
+import type { AudioInput, Score } from "../lib/transcription";
+import { ChordDiagram, TabScore } from "./tab-score";
 
 function getDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -31,116 +32,6 @@ function getDuration(file: File): Promise<number> {
     audio.onerror = () => finish();
     audio.src = url;
   });
-}
-
-function TabStaff({ score, compact = false }: { score: Score; compact?: boolean }) {
-  const pixelsPerSecond = 60;
-  const timed = score.measures.some(({ timing }) => timing !== undefined);
-  let nextX = 56;
-  let previousStart = 0;
-  let rightEdge = 0;
-  const layout = score.measures.map(({ timing }, measure) =>
-    timing?.map(({ start, notes, restBefore }, index) => {
-      const x = nextX + (start - previousStart) * pixelsPerSecond +
-        (index === 0 && measure > 0 ? 12 : 0) + (restBefore >= 0.1 ? 48 : 0);
-      nextX = x + 28;
-      previousStart = start;
-      rightEdge = Math.max(rightEdge, x + 38);
-      for (const note of notes) {
-        rightEdge = Math.max(rightEdge, x + (note.start - start + note.duration) * pixelsPerSecond + 16);
-      }
-      return x;
-    }),
-  );
-  const width = timed ? Math.max(590, rightEdge) : 40 + score.measures.length * 140;
-  const height = timed ? 192 : 158;
-  const stringLabels = score.tuning.map((string, index) =>
-    <text key={string} x="10" y={48 + (5 - index) * 19} className="string-label">{string}</text>,
-  );
-  return <div className={compact ? "staff preview-staff" : "staff"} tabIndex={compact ? undefined : 0}
-    role="region" aria-label="가로로 스크롤할 수 있는 타브 악보">
-    {timed && <div className="staff-tuning" aria-hidden="true">
-      <svg viewBox={`0 0 30 ${height}`} height={height}><rect width="30" height={height} />{stringLabels}</svg>
-    </div>}
-    <svg viewBox={`0 0 ${width} ${height}`} style={timed ? { width, minWidth: width } : undefined} role="img" aria-label={formatTab(score)}>
-      {!timed && stringLabels}
-      {score.tuning.map((string, index) => {
-        const y = 44 + (5 - index) * 19;
-        return <line key={string} x1="34" x2={width - 8} y1={y} y2={y} />;
-      })}
-      {score.measures.map(({ chord, beats, chordChanges, timing }, measure) => {
-        const positions = layout[measure];
-        const x = positions ? (measure === 0 ? 34 : positions[0] - 20) : 34 + measure * 140;
-        return <g key={measure}>
-          {chordChanges ? chordChanges.map(({ beat, name }) =>
-            <text key={beat} x={positions ? positions[beat] - 8 : x + 14 + beat * 28} y="23" className="chord-label">{name}</text>,
-          ) : <text x={x + 14} y="23" className="chord-label">{chord}</text>}
-          <line x1={x} x2={x} y1="44" y2="139" />
-          {timing?.map(({ restBefore, notes }, index) => {
-            const at = positions?.[index] ?? x;
-            const missing = notes.filter(({ string }) => string === null);
-            return <g key={index}>
-              {restBefore >= 0.1 && <text x={at - 18} y="163" textAnchor="end" className="string-label">
-                {restBefore.toFixed(2)}초 쉼
-              </text>}
-              {missing.length > 0 && <text x={at} y="182" textAnchor="middle" className="chord-label" style={{ fontSize: 11 }}>
-                <title>{missing.map(({ pitch, start, duration }) => `MIDI ${pitch}, ${start.toFixed(3)}초 시작, ${duration.toFixed(3)}초 지속`).join("\n")}</title>
-                ! {missing.length}
-              </text>}
-            </g>;
-          })}
-          {beats.map((beat, position) => beat.map((fret, string) => {
-            if (fret === null) return null;
-            const noteX = positions?.[position] ?? x + 22 + position * 28;
-            const column = timing?.[position];
-            const note = column?.notes.find((note) => note.string === string);
-            const y = 44 + (5 - string) * 19;
-            return <g key={`${position}-${string}`}>
-              {column && note && <>
-                <title>{`${note.start.toFixed(3)}초 시작 · ${note.duration.toFixed(3)}초 지속`}</title>
-                <rect x={noteX + (note.start - column.start) * pixelsPerSecond} y={y + 7}
-                  width={Math.max(2, note.duration * pixelsPerSecond)} height="2" rx="1" style={{ fill: "var(--muted)" }} />
-              </>}
-              <rect x={noteX - 10} y={y - 8} width="20" height="16" rx="3" />
-              <text x={noteX} y={y + 4} textAnchor="middle" className="fret">{fret}</text>
-            </g>;
-          }))}
-        </g>;
-      })}
-      <line x1={width - 8} x2={width - 8} y1="44" y2="139" />
-    </svg>
-  </div>;
-}
-
-function ChordDiagram({ chord }: { chord: Chord }) {
-  const playedFrets = chord.frets.filter((fret): fret is number => fret !== null && fret > 0);
-  const start = playedFrets.some((fret) => fret > 4) ? Math.min(...playedFrets) : 1;
-  return <figure className="chord">
-    <figcaption>{chord.name}</figcaption>
-    <svg viewBox="0 0 114 114" role="img" aria-label={`${chord.name} 운지, 낮은 줄부터 ${chord.frets.map((fret) => fret ?? "뮤트").join(", ")}`}>
-      {Array.from({ length: 5 }, (_, row) =>
-        <line key={row} x1="22" x2="92" y1={25 + row * 17} y2={25 + row * 17} className={row === 0 && start === 1 ? "nut" : ""} />)}
-      {start > 1 && <text x="3" y="38" className="diagram-marker">{start}fr</text>}
-      {chord.frets.map((fret, string) => {
-        const x = 22 + string * 14;
-        return <g key={string}>
-          <line x1={x} x2={x} y1="25" y2="93" />
-          {(fret === null || fret === 0) &&
-            <text x={x} y="17" textAnchor="middle" className="diagram-marker">{fret === null ? "×" : "○"}</text>}
-          <text x={x} y="108" textAnchor="middle" className="diagram-string">{exampleScore.tuning[string]}</text>
-        </g>;
-      })}
-      {chord.barre && <line className="barre" x1={22 + chord.barre.from * 14} x2={22 + chord.barre.to * 14}
-        y1={33.5 + (chord.barre.fret - start) * 17} y2={33.5 + (chord.barre.fret - start) * 17} />}
-      {chord.frets.map((fret, string) => {
-        if (!fret) return null;
-        const x = 22 + string * 14;
-        const y = 33.5 + (fret - start) * 17;
-        return <g key={string}><circle cx={x} cy={y} r="6" />
-          <text x={x} y={y + 3} textAnchor="middle" className="finger">{chord.fingers[string] || ""}</text></g>;
-      })}
-    </svg>
-  </figure>;
 }
 
 export default function Tabify({ demo }: { demo: boolean }) {
@@ -302,7 +193,7 @@ export default function Tabify({ demo }: { demo: boolean }) {
               <div><h2>악보 미리보기</h2><p>6현 타브와 코드별 기타 운지</p></div>
             </div>
             <div className="preview-content">
-              <TabStaff score={{ ...exampleScore, measures: exampleScore.measures.slice(0, 2) }} compact />
+              <TabScore score={{ ...exampleScore, measures: exampleScore.measures.slice(0, 2) }} compact />
               <div className="preview-chords">{exampleScore.chords.slice(0, 3).map((chord) => <ChordDiagram chord={chord} key={chord.name} />)}</div>
             </div>
             <button className="button sample" onClick={() => void analyze(true)} disabled={busy}>예시 악보 열기</button>
@@ -317,20 +208,14 @@ export default function Tabify({ demo }: { demo: boolean }) {
         </div>
         <section className="panel result-panel">
           <div className="panel-heading result-panel-heading"><span className="section-icon"><Music2 size={20} /></span>
-            <div><h2>타브 악보</h2><p>맨 위 줄은 가장 얇은 1번 줄입니다.{score.mock ? "" : " 막대는 음의 지속 시간, !는 운지 불가 음표 수입니다."}</p></div>
+            <div><h2>타브 악보</h2><p>맨 위 줄은 가장 얇은 1번 줄입니다. O는 개방현, X는 뮤트현입니다.</p></div>
             <button className="button button-neutral copy" onClick={() => void copy()}>
               {copyStatus === "복사 완료" ? <Check size={16} /> : <Copy size={16} />}
               {copyStatus === "복사 완료" ? copyStatus : "타브 복사"}
             </button>
           </div>
           <div role="status" className={copyStatus && copyStatus !== "복사 완료" ? "error" : "sr-only"}>{copyStatus}</div>
-          <TabStaff score={score} />
-        </section>
-        <section className="panel result-panel">
-          <div className="panel-heading"><span className="section-icon"><Guitar size={20} /></span>
-            <div><h2>코드 운지</h2><p>{score.mock ? "○ 개방현 · × 뮤트현 · 숫자 손가락 번호" : score.chords.length ? "Tabify 참고 운지 · ○ 개방현 · × 뮤트현 · 숫자 손가락 번호" : "표시할 코드 운지 정보가 없습니다."}</p></div>
-          </div>
-          <div className="result-chords">{score.chords.map((chord) => <ChordDiagram chord={chord} key={chord.name} />)}</div>
+          <TabScore score={score} />
         </section>
         {score.notices?.map((notice) => <p className="notice" key={notice}><Info size={16} /><span>{notice}</span></p>)}
         <p className="notice"><Info size={16} /><span>{score.mock ? "이 악보는 화면 확인용 예시입니다. " : ""}실제 자동 채보에는 음표나 운지 오류가 있을 수 있습니다.</span></p>

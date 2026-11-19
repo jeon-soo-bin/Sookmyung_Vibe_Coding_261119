@@ -82,6 +82,10 @@ h1, h2, p, figure { margin: 0; }
 .file-title { overflow-wrap: anywhere; font-size: .9375rem; }
 .file-meta { color: var(--muted); font-family: var(--mono); font-size: .8125rem; margin-top: 7px; line-height: 1.4; }
 .file-actions { display: flex; gap: 8px; margin-top: 13px; }
+.capo-setting { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: .875rem; }
+.capo-control { display: inline-grid; align-items: center; position: relative; }
+.capo-control select { appearance: none; background: var(--inset); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 32px 7px 11px; font: inherit; }
+.capo-control svg { position: absolute; right: 10px; pointer-events: none; color: var(--muted); }
 .button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px;
   padding: 7px 15px; border: 1px solid transparent; border-radius: 999px; font-size: .875rem; font-weight: 700;
@@ -107,6 +111,7 @@ h1, h2, p, figure { margin: 0; }
 .tab-system text { fill: var(--text); font: 600 13px var(--mono); }
 .tab-system .string-label { fill: var(--muted); }
 .tab-system .chord-label { fill: var(--accent); font: 700 15px var(--mono); }
+.tab-system .tab-shape { fill: var(--muted); font-size: 11px; }
 .tab-system .tab-unassigned { fill: var(--accent); font-size: 11px; }
 .tab-preview { padding: 6px 10px 0; }
 .tab-preview .tab-system { width: 100%; height: auto; max-height: 117px; }

@@ -2,7 +2,7 @@
 
 import {
   AudioLines, Check, ChevronRight, CircleHelp, CloudUpload, Copy, FileAudio,
-  Guitar, Info, LoaderCircle, Music2, RotateCcw, X,
+  ChevronDown, Guitar, Info, LoaderCircle, Music2, RotateCcw, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
@@ -10,6 +10,7 @@ import {
   AUDIO_EXTENSIONS, exampleScore, formatTab, validateAudio, validateAudioFile,
 } from "../lib/transcription";
 import type { AudioInput, Score } from "../lib/transcription";
+import { MAX_CAPO } from "../lib/capo";
 import { ChordDiagram, TabScore } from "./tab-score";
 
 function getDuration(file: File): Promise<number> {
@@ -37,6 +38,7 @@ function getDuration(file: File): Promise<number> {
 export default function Tabify({ demo }: { demo: boolean }) {
   const [file, setFile] = useState<AudioInput & { audio: File }>();
   const [score, setScore] = useState<Score>();
+  const [capo, setCapo] = useState(0);
   const [phase, setPhase] = useState<"idle" | "validating" | "analyzing">("idle");
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -91,9 +93,12 @@ export default function Tabify({ demo }: { demo: boolean }) {
     try {
       const live = !sample && !demo && file;
       const form = new FormData();
-      if (live) form.append("file", live.audio);
-      const body = live ? form : JSON.stringify(sample ? { sample: true } :
-        file && { name: file.name, size: file.size, duration: file.duration });
+      if (live) {
+        form.append("file", live.audio);
+        form.append("capo", String(capo));
+      }
+      const body = live ? form : JSON.stringify(sample ? { sample: true, capo } :
+        file && { name: file.name, size: file.size, duration: file.duration, capo });
       const [response] = await Promise.all([
         fetch("/api/analyze", {
           method: "POST",
@@ -183,6 +188,18 @@ export default function Tabify({ demo }: { demo: boolean }) {
             </div>
             {error && <p className="error" role="alert">{error}</p>}
             <span className="sr-only" role="status">{phase === "validating" ? "음원 확인 중" : phase === "analyzing" ? analysisLabel : ""}</span>
+            <label className="capo-setting" htmlFor="capo">
+              <span>카포 위치</span>
+              <span className="capo-control">
+                <select id="capo" name="capo" value={capo} disabled={busy} onChange={(event) => setCapo(Number(event.target.value))}>
+                  <option value={0}>카포 없음</option>
+                  {Array.from({ length: MAX_CAPO }, (_, index) =>
+                    <option key={index + 1} value={index + 1}>{index + 1}프렛</option>,
+                  )}
+                </select>
+                <ChevronDown size={15} aria-hidden="true" />
+              </span>
+            </label>
             <button className="button primary analyze" onClick={() => void analyze()} disabled={!file || busy}>
               {busy ? <LoaderCircle className="spin" size={18} /> : <Music2 size={18} />}
               {phase === "validating" ? "파일 확인 중" : phase === "analyzing" ? analysisLabel : "분석 시작"}
@@ -203,12 +220,14 @@ export default function Tabify({ demo }: { demo: boolean }) {
       </> : <>
         <div className="result-heading">
           <div><span className="result-kind">{score.mock ? "예시 악보" : "Klangio 분석 결과"}</span><h1 ref={heading} tabIndex={-1}>{score.title}</h1>
-            <p>표준 튜닝 <span className="tuning">{score.tuning.join(" · ")}</span></p></div>
+            <p>표준 튜닝 <span className="tuning">{score.tuning.join(" · ")}</span>{score.capo ? ` · 카포 ${score.capo}프렛` : ""}</p></div>
           <button className="button button-neutral reset" onClick={reset}><RotateCcw size={17} /> 새 음원 선택</button>
         </div>
         <section className="panel result-panel">
           <div className="panel-heading result-panel-heading"><span className="section-icon"><Music2 size={20} /></span>
-            <div><h2>타브 악보</h2><p>맨 위 줄은 가장 얇은 1번 줄입니다. O는 개방현, X는 뮤트현입니다.</p></div>
+            <div><h2>타브 악보</h2><p>{score.capo
+              ? `프렛 숫자는 카포 기준입니다. 0은 카포 ${score.capo}프렛에서 줄을 누르지 않고 연주합니다.`
+              : "맨 위 줄은 가장 얇은 1번 줄입니다. O는 개방현, X는 뮤트현입니다."}</p></div>
             <button className="button button-neutral copy" onClick={() => void copy()}>
               {copyStatus === "복사 완료" ? <Check size={16} /> : <Copy size={16} />}
               {copyStatus === "복사 완료" ? copyStatus : "타브 복사"}
@@ -217,6 +236,7 @@ export default function Tabify({ demo }: { demo: boolean }) {
           <div role="status" className={copyStatus && copyStatus !== "복사 완료" ? "error" : "sr-only"}>{copyStatus}</div>
           <TabScore score={score} />
         </section>
+        {!!score.capo && <p className="notice"><Info size={16} /><span>위쪽 코드명은 실제 울리는 코드입니다. ‘모양’은 카포 기준 참고 운지이며, 타브의 개별 음 배치와 다를 수 있습니다.</span></p>}
         {score.notices?.map((notice) => <p className="notice" key={notice}><Info size={16} /><span>{notice}</span></p>)}
         <p className="notice"><Info size={16} /><span>{score.mock ? "이 악보는 화면 확인용 예시입니다. " : ""}실제 자동 채보에는 음표나 운지 오류가 있을 수 있습니다.</span></p>
       </>}

@@ -1,13 +1,14 @@
-import { exampleScore, STANDARD_TUNING } from "./transcription";
+import { chordShape } from "./capo";
+import { createMockScore, exampleScore, STANDARD_OPEN_PITCHES, STANDARD_TUNING } from "./transcription";
 import { assignGuitarPositions } from "./guitar-fingering";
-import type { ChordInterval, Note, Score, TimedColumn } from "./transcription";
+import type { AudioInput, ChordInterval, Note, Score, TimedColumn } from "./transcription";
 
 export type { Note } from "./transcription";
 export type { ChordInterval } from "./transcription";
 
 const simultaneousWindow = 0.04;
 
-export function createGuitarScore(name: string, notes: Note[], intervals: ChordInterval[], chordNotice?: string): Score | null {
+export function createGuitarScore(name: string, notes: Note[], intervals: ChordInterval[], capo = 0): Score | null {
   if (!notes.length) return null;
   const columns: { start: number; notes: Note[]; chord?: string }[] = [];
   for (const note of [...notes].sort((a, b) => a.start - b.start || a.pitch - b.pitch)) {
@@ -26,7 +27,7 @@ export function createGuitarScore(name: string, notes: Note[], intervals: ChordI
 
   const measures: Score["measures"] = [];
   columns.sort((a, b) => a.start - b.start);
-  const { positions, difficult } = assignGuitarPositions(columns.map(({ notes }) => notes));
+  const { positions, difficult } = assignGuitarPositions(columns.map(({ notes }) => notes), capo);
   let soundingUntil = 0;
   let unassigned = 0;
   for (const [index, column] of columns.entries()) {
@@ -56,21 +57,41 @@ export function createGuitarScore(name: string, notes: Note[], intervals: ChordI
   }
 
   const names = new Set(intervals.map(({ name }) => name));
-  const chords = exampleScore.chords.filter((chord) => names.has(chord.name));
+  const shapes = new Set([...names].map((name) => chordShape(name, capo)));
+  const chords = exampleScore.chords.filter((chord) => shapes.has(chord.name));
   const notices = [];
-  if (chordNotice) notices.push(chordNotice);
-  else if (!names.size) notices.push("인식된 코드가 없습니다.");
-  if (names.size > chords.length) notices.push("운지 데이터가 있는 코드의 참고 그림만 표시합니다. 나머지 코드는 악보에서 이름을 확인할 수 있습니다.");
-  if (unassigned) notices.push(`표준 튜닝 6현·24프렛 또는 동시에 사용할 수 있는 줄의 한계로 음표 ${unassigned}개에 운지를 배정하지 못했습니다. 악보의 ! 표시나 복사한 타브에서 해당 음을 확인할 수 있습니다.`);
+  if (!names.size) notices.push("인식된 코드가 없습니다.");
+  if ([...shapes].some((shape) => !chords.some((chord) => chord.name === shape))) notices.push("운지 데이터가 있는 코드의 참고 그림만 표시합니다. 나머지 코드는 악보에서 이름을 확인할 수 있습니다.");
+  if (unassigned) notices.push(`${capo ? `카포 ${capo}프렛의 음역` : "표준 튜닝 6현·24프렛의 음역"} 또는 동시에 사용할 수 있는 줄의 한계로 음표 ${unassigned}개에 운지를 배정하지 못했습니다. 악보의 ! 표시나 복사한 타브에서 해당 음을 확인할 수 있습니다.`);
   if (difficult) notices.push("일부 겹치는 음은 프렛 간격이나 필요한 손가락 수 때문에 한 손으로 연주하기 어려울 수 있습니다.");
 
   return {
     title: name.replace(/\.[^.]+$/, "").trim() || "기타 연주",
     tuning: STANDARD_TUNING,
     mock: false,
+    capo,
     measures,
     chords,
     chordIntervals: intervals,
     notices,
   };
+}
+
+export function createDemoScore(input?: AudioInput, capo = 0): Score {
+  const demo = createMockScore(input);
+  if (capo === 0) return demo;
+  const notes: Note[] = [];
+  const intervals: ChordInterval[] = [];
+  let start = 0;
+  for (const { chord, beats } of demo.measures) {
+    intervals.push({ start, end: start + beats.length * 0.25, name: chord });
+    for (const frets of beats) {
+      frets.forEach((fret, string) => {
+        if (fret !== null) notes.push({ pitch: STANDARD_OPEN_PITCHES[string] + fret, start, duration: 0.2 });
+      });
+      start += 0.25;
+    }
+  }
+  const score = createGuitarScore(demo.title, notes, intervals, capo);
+  return score ? { ...score, title: demo.title, mock: true } : demo;
 }

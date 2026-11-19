@@ -1,6 +1,6 @@
+import { STANDARD_OPEN_PITCHES } from "./transcription";
 import type { Note } from "./transcription";
 
-const openPitches = [40, 45, 50, 55, 59, 64];
 const maxFret = 24;
 const beamWidth = 96;
 const timeTolerance = 1e-9;
@@ -59,15 +59,16 @@ function keepBest(states: Iterable<State>) {
   return [...unique.values()].sort(compare).slice(0, beamWidth);
 }
 
-export function assignGuitarPositions(columns: Note[][]) {
-  let states: State[] = [{ strings: openPitches.map(() => null), used: 0, hand: 2, count: 0, cost: 0, difficult: false }];
+export function assignGuitarPositions(columns: Note[][], capo = 0) {
+  let states: State[] = [{ strings: STANDARD_OPEN_PITCHES.map(() => null), used: 0, hand: 2, count: 0, cost: 0, difficult: false }];
   for (const [column, notes] of columns.entries()) {
     if (!notes.length) continue;
     for (const [noteIndex, note] of notes.entries()) {
       const options: State[] = [];
-      const candidates = openPitches.flatMap((pitch, string) => {
-        const fret = note.pitch - pitch;
-        return fret >= 0 && fret <= maxFret ? [{ string, fret }] : [];
+      const candidates = STANDARD_OPEN_PITCHES.flatMap((pitch, string) => {
+        const absoluteFret = note.pitch - pitch;
+        return absoluteFret >= capo && absoluteFret <= maxFret
+          ? [{ string, fret: absoluteFret - capo }] : [];
       });
       for (const state of states) {
         const strings = state.strings.map((active) =>

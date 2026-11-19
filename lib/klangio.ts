@@ -91,7 +91,7 @@ function readChords(json: unknown): ChordInterval[] {
   });
 }
 
-export async function analyzeGuitar(file: File, key: string, requestSignal: AbortSignal) {
+export async function analyzeGuitar(file: File, key: string, requestSignal: AbortSignal, capo = 0) {
   const remaining = canSubmitAt - Date.now();
   if (active || remaining > 0) {
     throw new AnalysisError("다른 분석이 진행 중이거나 요청 간격 제한에 도달했습니다. 잠시 후 다시 시도해 주세요.",
@@ -115,14 +115,14 @@ export async function analyzeGuitar(file: File, key: string, requestSignal: Abor
     } catch {
       throw new AnalysisError("Klangio 전사 결과에서 MIDI 음표를 읽을 수 없습니다.", 502);
     }
-    const tab = createGuitarScore(file.name, notes, []);
+    const tab = createGuitarScore(file.name, notes, [], capo);
     if (!tab) throw new AnalysisError("기타 타브에 표시할 수 있는 음표를 찾지 못했습니다.", 422);
 
     try {
       await delay(Math.max(0, canSubmitAt - Date.now()), undefined, { signal });
       const chords = await runJob("/chord-recognition?vocabulary=major-minor", audioForm(file), key, signal);
       const result = await requestKlangio(chords + "/json", key, signal);
-      return createGuitarScore(file.name, notes, readChords(await result.json())) ?? tab;
+      return createGuitarScore(file.name, notes, readChords(await result.json()), capo) ?? tab;
     } catch (error) {
       const reason = error instanceof AnalysisError ? error.message : "코드 분석 결과를 가져오지 못했습니다.";
       return { ...tab, notices: [`코드 정보를 표시할 수 없습니다. ${reason}`,

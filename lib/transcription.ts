@@ -5,6 +5,7 @@ export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 4_000_000;
 export const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a"];
 export const STANDARD_TUNING = ["E", "A", "D", "G", "B", "e"];
+export const STANDARD_OPEN_PITCHES = [40, 45, 50, 55, 59, 64];
 
 export type AudioInput = { name: string; size: number; duration: number };
 
@@ -48,6 +49,7 @@ export type Score = {
   title: string;
   tuning: string[];
   mock: boolean;
+  capo?: number;
   measures: {
     chord: string;
     beats: (number | null)[][];
@@ -102,6 +104,7 @@ export function formatTab(score: Score, includeTiming = true) {
       score.tuning[index] + " " + line.join(""),
     ).reverse()].join("\n");
   });
+  if (score.capo) systems.unshift(`카포 ${score.capo}프렛 · 프렛 숫자는 카포 기준`);
   if (!includeTiming) return systems.join("\n\n");
   const timing = score.measures.flatMap(({ timing }) => timing ?? []).flatMap(({ restBefore, notes, start }) => [
     ...(restBefore >= 0.1 ? [`${start.toFixed(3)}초 전 쉼 ${restBefore.toFixed(3)}초`] : []),

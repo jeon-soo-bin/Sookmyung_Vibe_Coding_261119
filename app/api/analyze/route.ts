@@ -1,9 +1,12 @@
 import { parseBuffer } from "music-metadata";
 import { AnalysisError, analyzeGuitar, getKlangioKey } from "../../../lib/klangio";
-import { createMockScore, MAX_UPLOAD_BYTES, validateAudio, validateAudioFile } from "../../../lib/transcription";
+import { isCapo } from "../../../lib/capo";
+import { createDemoScore } from "../../../lib/guitar-score";
+import { MAX_UPLOAD_BYTES, validateAudio, validateAudioFile } from "../../../lib/transcription";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+const invalidCapo = "카포는 0부터 12까지의 정수로 선택해 주세요.";
 
 function failure(error: string, status: number, retryAfter?: string) {
   return Response.json({ error }, { status, headers: retryAfter ? { "Retry-After": retryAfter } : undefined });
@@ -21,6 +24,11 @@ export async function POST(request: Request) {
     if (!(file instanceof File) || extra !== undefined || file.name.length > 255) {
       return failure("음원 파일 하나를 선택해 주세요.", 400);
     }
+    const capoFields = form?.getAll("capo") ?? [];
+    const rawCapo = capoFields[0];
+    const capo = rawCapo === undefined ? 0 : typeof rawCapo === "string" && /^\d{1,2}$/.test(rawCapo) ? Number(rawCapo) : NaN;
+    if (capoFields.length > 1 || !isCapo(capo)) return failure(invalidCapo, 400);
+
     const fileError = validateAudioFile(file, true);
     if (fileError) return failure(fileError, file.size > MAX_UPLOAD_BYTES ? 413 : 400);
 
@@ -36,7 +44,7 @@ export async function POST(request: Request) {
     if (durationError) return failure(durationError, 422);
 
     try {
-      return Response.json(await analyzeGuitar(file, key, request.signal));
+      return Response.json(await analyzeGuitar(file, key, request.signal, capo));
     } catch (error) {
       if (error instanceof AnalysisError) return failure(error.message, error.status, error.retryAfter);
       return failure("분석을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.", 502);
@@ -46,8 +54,10 @@ export async function POST(request: Request) {
   if (typeof body !== "object" || body === null) {
     return Response.json({ error: "요청을 읽을 수 없습니다." }, { status: 400 });
   }
+  const capo = "capo" in body ? body.capo : 0;
+  if (!isCapo(capo)) return failure(invalidCapo, 400);
   if ("sample" in body && body.sample === true) {
-    return Response.json(createMockScore());
+    return Response.json(createDemoScore(undefined, capo));
   }
   if (key) return failure("실제 분석에는 음원 파일이 필요합니다. 페이지를 새로 고친 뒤 다시 시도해 주세요.", 400);
   if (!("name" in body) || typeof body.name !== "string" || body.name.length > 255 ||
@@ -58,5 +68,5 @@ export async function POST(request: Request) {
   const input = { name: body.name, size: body.size, duration: body.duration };
   const error = validateAudio(input);
   if (error) return Response.json({ error }, { status: 400 });
-  return Response.json(createMockScore(input));
+  return Response.json(createDemoScore(input, capo));
 }

@@ -1,4 +1,5 @@
 import type { Chord, Score } from "./transcription";
+import { chordShape } from "./capo";
 
 type Change = { name: string; voicing?: Chord };
 type Event = { time: number; frets?: (number | null)[]; missing?: number; change?: Change };
@@ -10,7 +11,7 @@ export function layoutTab(score: Score, width: number): TabRow[] {
   const events: Event[] = [];
   const makeChange = (name: string, voicingId?: string): Change => ({
     name,
-    voicing: score.chords.find((chord) => chord.name === name &&
+    voicing: score.chords.find((chord) => chord.name === chordShape(name, score.capo ?? 0) &&
       (voicingId === undefined || chord.voicingId === voicingId)),
   });
   let beatIndex = 0;

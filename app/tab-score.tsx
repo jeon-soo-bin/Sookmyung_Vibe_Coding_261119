@@ -68,7 +68,9 @@ export function TabScore({ score, compact = false }: { score: Score; compact?: b
     tabIndex={compact ? undefined : 0}>
     {!compact && <pre className="sr-only">{formatTab(score, false)}</pre>}
     {rows.map(({ events }, row) => {
-      const top = compact ? 28 : events.some(({ change }) => change?.voicing) ? 101 : events.some(({ change }) => change) ? 39 : 23;
+      const hasVoicing = events.some(({ change }) => change?.voicing);
+      const hasShapeLabel = !!score.capo && hasVoicing && !compact;
+      const top = compact ? 28 : hasVoicing ? (hasShapeLabel ? 116 : 101) : events.some(({ change }) => change) ? 39 : 23;
       const gutter = compact ? 14 : 17;
       const bottom = top + 5 * gutter;
       const height = bottom + (events.some(({ missing }) => missing) ? 28 : 16);
@@ -84,10 +86,13 @@ export function TabScore({ score, compact = false }: { score: Score; compact?: b
         {events.map(({ x, change, frets, missing }, column) => <g key={column}>
           {change && <>
             <text x={x} y="17" textAnchor="middle" className="chord-label">{change.name}</text>
-            {!compact && change.voicing && <svg x={x - 38} y="20" width="76" height="76" viewBox="0 0 114 114"
-              className="tab-voicing" role="img" aria-label={chordDescription(change.voicing)}>
-              <ChordGrid chord={change.voicing} />
-            </svg>}
+            {!compact && change.voicing && <>
+              {hasShapeLabel && <text x={x} y="33" textAnchor="middle" className="tab-shape">{change.voicing.name} 모양</text>}
+              <svg x={x - 38} y={hasShapeLabel ? 35 : 20} width="76" height="76" viewBox="0 0 114 114"
+                className="tab-voicing" role="img" aria-label={chordDescription(change.voicing)}>
+                <ChordGrid chord={change.voicing} />
+              </svg>
+            </>}
           </>}
           {frets?.map((fret, string) => {
             if (fret === null) return null;

@@ -1,17 +1,24 @@
 export const MAX_SECONDS = 15;
 export const MAX_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 4_000_000;
 export const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a"];
 export const STANDARD_TUNING = ["E", "A", "D", "G", "B", "e"];
 
 export type AudioInput = { name: string; size: number; duration: number };
 
-export function validateAudio(input: AudioInput) {
-  if (!AUDIO_EXTENSIONS.includes(input.name.split(".").pop()?.toLowerCase() ?? "")) {
+export function validateAudioFile(input: Pick<AudioInput, "name" | "size">, real = false) {
+  if (!input.name.includes(".") || !AUDIO_EXTENSIONS.includes(input.name.split(".").pop()?.toLowerCase() ?? "")) {
     return "MP3, WAV, M4A 파일을 선택해 주세요.";
   }
-  if (!Number.isSafeInteger(input.size) || input.size < 1 || input.size > MAX_BYTES) {
-    return "파일 크기는 0B보다 크고 10MB 이하여야 합니다.";
+  if (!Number.isSafeInteger(input.size) || input.size < 1 || input.size > (real ? MAX_UPLOAD_BYTES : MAX_BYTES)) {
+    return `파일 크기는 0B보다 크고 ${real ? 4 : 10}MB 이하여야 합니다.`;
   }
+  return null;
+}
+
+export function validateAudio(input: AudioInput, real = false) {
+  const fileError = validateAudioFile(input, real);
+  if (fileError) return fileError;
   if (!Number.isFinite(input.duration) || input.duration <= 0 || input.duration > MAX_SECONDS) {
     return "15초 이하의 재생 가능한 음원을 선택해 주세요.";
   }
@@ -28,9 +35,10 @@ export type Chord = {
 export type Score = {
   title: string;
   tuning: string[];
-  mock: true;
-  measures: { chord: string; beats: (number | null)[][] }[];
+  mock: boolean;
+  measures: { chord: string; beats: (number | null)[][]; chordChanges?: { beat: number; name: string }[] }[];
   chords: Chord[];
+  notices?: string[];
 };
 
 export const exampleScore: Score = {
@@ -60,7 +68,13 @@ export function createMockScore(input?: AudioInput): Score {
 
 export function formatTab(score: Score) {
   const measureWidth = Math.max(...score.measures.map(({ beats, chord }) => Math.max(beats.length * 3, chord.length)));
-  const header = score.measures.map(({ chord }) => chord.padEnd(measureWidth + 1)).join("");
+  const header = score.measures.map(({ chord, chordChanges }) => {
+    if (!chordChanges) return chord.padEnd(measureWidth + 1);
+    return Array.from({ length: measureWidth }, (_, i) => {
+      const change = chordChanges.find(({ beat, name }) => i >= beat * 3 && i < beat * 3 + name.length);
+      return change ? change.name[i - change.beat * 3] : " ";
+    }).join("") + " ";
+  }).join("");
   const strings = score.tuning.map((string, index) =>
     string + "|" + score.measures.map(({ beats }) => beats.map((beat) =>
       String(beat[index] ?? "-").padEnd(3, "-")).join("").padEnd(measureWidth, "-")).join("|") + "|",

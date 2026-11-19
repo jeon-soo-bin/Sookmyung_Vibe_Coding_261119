@@ -34,29 +34,73 @@ function getDuration(file: File): Promise<number> {
 }
 
 function TabStaff({ score, compact = false }: { score: Score; compact?: boolean }) {
-  const width = 40 + score.measures.length * 140;
+  const pixelsPerSecond = 60;
+  const timed = score.measures.some(({ timing }) => timing !== undefined);
+  let nextX = 56;
+  let previousStart = 0;
+  let rightEdge = 0;
+  const layout = score.measures.map(({ timing }, measure) =>
+    timing?.map(({ start, notes, restBefore }, index) => {
+      const x = nextX + (start - previousStart) * pixelsPerSecond +
+        (index === 0 && measure > 0 ? 12 : 0) + (restBefore >= 0.1 ? 48 : 0);
+      nextX = x + 28;
+      previousStart = start;
+      rightEdge = Math.max(rightEdge, x + 38);
+      for (const note of notes) {
+        rightEdge = Math.max(rightEdge, x + (note.start - start + note.duration) * pixelsPerSecond + 16);
+      }
+      return x;
+    }),
+  );
+  const width = timed ? Math.max(590, rightEdge) : 40 + score.measures.length * 140;
+  const height = timed ? 192 : 158;
+  const stringLabels = score.tuning.map((string, index) =>
+    <text key={string} x="10" y={48 + (5 - index) * 19} className="string-label">{string}</text>,
+  );
   return <div className={compact ? "staff preview-staff" : "staff"} tabIndex={compact ? undefined : 0}
     role="region" aria-label="가로로 스크롤할 수 있는 타브 악보">
-    <svg viewBox={`0 0 ${width} 158`} style={score.mock ? undefined : { minWidth: width }} role="img" aria-label={formatTab(score)}>
+    {timed && <div className="staff-tuning" aria-hidden="true">
+      <svg viewBox={`0 0 30 ${height}`} height={height}><rect width="30" height={height} />{stringLabels}</svg>
+    </div>}
+    <svg viewBox={`0 0 ${width} ${height}`} style={timed ? { width, minWidth: width } : undefined} role="img" aria-label={formatTab(score)}>
+      {!timed && stringLabels}
       {score.tuning.map((string, index) => {
         const y = 44 + (5 - index) * 19;
-        return <g key={string}>
-          <text x="10" y={y + 4} className="string-label">{string}</text>
-          <line x1="34" x2={width - 8} y1={y} y2={y} />
-        </g>;
+        return <line key={string} x1="34" x2={width - 8} y1={y} y2={y} />;
       })}
-      {score.measures.map(({ chord, beats, chordChanges }, measure) => {
-        const x = 34 + measure * 140;
+      {score.measures.map(({ chord, beats, chordChanges, timing }, measure) => {
+        const positions = layout[measure];
+        const x = positions ? (measure === 0 ? 34 : positions[0] - 20) : 34 + measure * 140;
         return <g key={measure}>
           {chordChanges ? chordChanges.map(({ beat, name }) =>
-            <text key={beat} x={x + 14 + beat * 28} y="23" className="chord-label">{name}</text>,
+            <text key={beat} x={positions ? positions[beat] - 8 : x + 14 + beat * 28} y="23" className="chord-label">{name}</text>,
           ) : <text x={x + 14} y="23" className="chord-label">{chord}</text>}
           <line x1={x} x2={x} y1="44" y2="139" />
+          {timing?.map(({ restBefore, notes }, index) => {
+            const at = positions?.[index] ?? x;
+            const missing = notes.filter(({ string }) => string === null);
+            return <g key={index}>
+              {restBefore >= 0.1 && <text x={at - 18} y="163" textAnchor="end" className="string-label">
+                {restBefore.toFixed(2)}초 쉼
+              </text>}
+              {missing.length > 0 && <text x={at} y="182" textAnchor="middle" className="chord-label" style={{ fontSize: 11 }}>
+                <title>{missing.map(({ pitch, start, duration }) => `MIDI ${pitch}, ${start.toFixed(3)}초 시작, ${duration.toFixed(3)}초 지속`).join("\n")}</title>
+                ! {missing.length}
+              </text>}
+            </g>;
+          })}
           {beats.map((beat, position) => beat.map((fret, string) => {
             if (fret === null) return null;
-            const noteX = x + 22 + position * 28;
+            const noteX = positions?.[position] ?? x + 22 + position * 28;
+            const column = timing?.[position];
+            const note = column?.notes.find((note) => note.string === string);
             const y = 44 + (5 - string) * 19;
             return <g key={`${position}-${string}`}>
+              {column && note && <>
+                <title>{`${note.start.toFixed(3)}초 시작 · ${note.duration.toFixed(3)}초 지속`}</title>
+                <rect x={noteX + (note.start - column.start) * pixelsPerSecond} y={y + 7}
+                  width={Math.max(2, note.duration * pixelsPerSecond)} height="2" rx="1" style={{ fill: "var(--muted)" }} />
+              </>}
               <rect x={noteX - 10} y={y - 8} width="20" height="16" rx="3" />
               <text x={noteX} y={y + 4} textAnchor="middle" className="fret">{fret}</text>
             </g>;
@@ -273,7 +317,7 @@ export default function Tabify({ demo }: { demo: boolean }) {
         </div>
         <section className="panel result-panel">
           <div className="panel-heading result-panel-heading"><span className="section-icon"><Music2 size={20} /></span>
-            <div><h2>타브 악보</h2><p>맨 위 줄은 가장 얇은 1번 줄입니다.</p></div>
+            <div><h2>타브 악보</h2><p>맨 위 줄은 가장 얇은 1번 줄입니다.{score.mock ? "" : " 막대는 음의 지속 시간, !는 운지 불가 음표 수입니다."}</p></div>
             <button className="button button-neutral copy" onClick={() => void copy()}>
               {copyStatus === "복사 완료" ? <Check size={16} /> : <Copy size={16} />}
               {copyStatus === "복사 완료" ? copyStatus : "타브 복사"}

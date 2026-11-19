@@ -32,11 +32,23 @@ export type Chord = {
   barre?: { fret: number; from: number; to: number };
 };
 
+export type Note = { pitch: number; start: number; duration: number };
+export type TimedColumn = {
+  start: number;
+  restBefore: number;
+  notes: (Note & { string: number | null })[];
+};
+
 export type Score = {
   title: string;
   tuning: string[];
   mock: boolean;
-  measures: { chord: string; beats: (number | null)[][]; chordChanges?: { beat: number; name: string }[] }[];
+  measures: {
+    chord: string;
+    beats: (number | null)[][];
+    chordChanges?: { beat: number; name: string }[];
+    timing?: TimedColumn[];
+  }[];
   chords: Chord[];
   notices?: string[];
 };
@@ -79,5 +91,10 @@ export function formatTab(score: Score) {
     string + "|" + score.measures.map(({ beats }) => beats.map((beat) =>
       String(beat[index] ?? "-").padEnd(3, "-")).join("").padEnd(measureWidth, "-")).join("|") + "|",
   ).reverse();
-  return ["  " + header.trimEnd(), ...strings].join("\n");
+  const timing = score.measures.flatMap(({ timing }) => timing ?? []).flatMap(({ restBefore, notes, start }) => [
+    ...(restBefore >= 0.1 ? [`${start.toFixed(3)}초 전 쉼 ${restBefore.toFixed(3)}초`] : []),
+    ...notes.map(({ pitch, start, duration, string }) =>
+      `${start.toFixed(3)}초 · ${duration.toFixed(3)}초 지속 · MIDI ${pitch} · ${string === null ? "줄 배치 불가" : `${6 - string}번 줄`}`),
+  ]);
+  return ["  " + header.trimEnd(), ...strings, ...(timing.length ? ["", "음표 시간", ...timing] : [])].join("\n");
 }

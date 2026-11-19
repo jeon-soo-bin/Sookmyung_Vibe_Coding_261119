@@ -101,6 +101,8 @@ h1, h2, p, figure { margin: 0; }
 .preview-content { background: var(--inset); border: 1px solid var(--border); border-radius: 12px; min-height: 212px; display: flex; flex-direction: column; }
 .staff { overflow-x: auto; background: var(--inset); border-radius: 10px; }
 .staff svg { width: 100%; min-width: 590px; max-height: 220px; display: block; }
+.staff-tuning { position: sticky; left: 0; z-index: 1; width: 30px; height: 0; pointer-events: none; }
+.staff .staff-tuning svg { width: 30px; min-width: 0; }
 .staff line, .chord line { stroke: #526068; stroke-width: 1; }
 .staff rect { fill: var(--inset); }
 .staff text { fill: var(--text); font: 600 13px var(--mono); }

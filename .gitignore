@@ -1,0 +1,15 @@
+# Local environment files and credentials
+.env
+.env.*
+*.env
+*.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local dependencies and build output
+node_modules/
+.next/
+out/
+.vercel/
